@@ -24,9 +24,6 @@
 # .idea/gradle.xml
 # .idea/libraries
 
-# Mongo Explorer plugin:
-# .idea/mongoSettings.xml
-
 ## File-based project format:
 *.ipr
 *.iws
@@ -46,4 +43,3 @@ atlassian-ide-plugin.xml
 com_crashlytics_export_strings.xml
 crashlytics.properties
 crashlytics-build.properties
-
