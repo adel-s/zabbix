@@ -12,5 +12,5 @@ Some metrics has no script - all needful is inside the userparameter.conf itself
 
 TODO
 -------------
-Add zabbix .xml templates for scripts usage.
+Add zabbix .xml templates for scripts usage.  
 Add readme to scripts.
