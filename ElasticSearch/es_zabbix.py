@@ -12,8 +12,8 @@ Zabbix agent script for consuming ElasticSearch metrics
 """
 
 __author__ = "Adel Sachkov <adel.sachkov@yandex.ru>"
-__date__ = "1 Feb 2018"
-__version__ = "$Revision: 2.0 $"
+__date__ = "13 May 2018"
+__version__ = "$Revision: 2.1 $"
 
 es_host = 'localhost'
 es_port = 9200
@@ -70,6 +70,14 @@ def discover_nodes(con, node_id=None):
     return json.dumps(zabbix_json)
 
 
+def discover_indices(con):
+    zabbix_json = {'data': []}
+    api_data = get_es_metrics(con, 'indices', 'indices')
+    for k in api_data.keys():
+        zabbix_json['data'].append({'{#NAME}': k})
+    return json.dumps(zabbix_json)
+
+
 if __name__ == '__main__':
     es_api = None
     es_key = None
@@ -88,5 +96,7 @@ if __name__ == '__main__':
     elif es_api == 'discover' and es_key == 'node':
         node = ''.join(es.nodes.stats('_local')['nodes'].keys())
         print discover_nodes(es, node)
+    elif es_api == 'discover' and es_key == 'indices':
+        print discover_indices(es)
     else:
         print get_es_metrics(es, es_api, es_key)
