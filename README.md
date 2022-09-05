@@ -1,3 +1,6 @@
+**IMPORTANT: This repo and it's scripts were created for Zabbix 2.x, mostly outdated and not applicable to current Zabbix versions.**
+
+
 What is it?
 -------------
 My zabbix-agent bash scripts for monitoring everything.
