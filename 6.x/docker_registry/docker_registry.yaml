@@ -1,0 +1,506 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: 'Templates/Applications'
+  templates:
+    - uuid: 42f1b61397f54fa1b77f9525b54e6f2a
+      template: 'Docker Registry'
+      name: 'Docker Registry'
+      description: |
+        Docker Registry (distribution v3) via its debug listener.
+        All items are HTTP agent items polled by the Zabbix server (or proxy), no agent needed.
+        - /debug/health: 200 + {} when healthy, 503 + JSON with failing checks otherwise.
+        - /metrics: Prometheus text format (http.debug.prometheus.enabled: true).
+        Storage latency excludes action Stat: it is dominated by the built-in storagedriver health check.
+      groups:
+        - name: 'Templates/Applications'
+      items:
+        - uuid: 4efa2aabbfa5482eba96852006bde200
+          name: 'Registry: Health details'
+          type: HTTP_AGENT
+          key: registry.health
+          history: 7d
+          value_type: TEXT
+          trends: '0'
+          description: 'Raw answer: {} when healthy; otherwise JSON with the failing checks.'
+          timeout: 5s
+          url: '{$REGISTRY.DEBUG.URL}/debug/health'
+          status_codes: '200,503'
+          tags:
+            - tag: component
+              value: health
+          triggers:
+            - uuid: 2a5db477e3b540d4a2e83bb937913b4b
+              expression: 'nodata(/Docker Registry/registry.health,{$REGISTRY.NODATA.PERIOD})=1'
+              name: 'Registry: Debug endpoint unreachable'
+              priority: HIGH
+              description: 'No answer from {$REGISTRY.DEBUG.URL} for {$REGISTRY.NODATA.PERIOD}: registry process down or the debug listener is not reachable.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: 6164380b2bda47f1b1db80b196424bbd
+          name: 'Registry: Health status'
+          type: DEPENDENT
+          key: registry.health.status
+          delay: '0'
+          description: 'Healthy when the health answer is exactly {}.'
+          valuemap:
+            name: 'Registry health'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - 'return value === ''{}'' ? 1 : 0;'
+          master_item:
+            key: registry.health
+          tags:
+            - tag: component
+              value: health
+        - uuid: 888e1ecae27f46db8cc5f83d560021a6
+          name: 'Registry: HTTP request duration, average'
+          type: CALCULATED
+          key: registry.http.duration.avg
+          value_type: FLOAT
+          units: s
+          params: last(//registry.http.duration.sum.rate)/(last(//registry.http.duration.count.rate)+0.000001)
+          description: 'Average over the polling interval; 0 when there were no requests.'
+          tags:
+            - tag: component
+              value: http
+        - uuid: 0a97be763a58407b8d546d658ef063bc
+          name: 'Registry: HTTP request count, per second'
+          type: DEPENDENT
+          key: registry.http.duration.count.rate
+          delay: '0'
+          history: 1d
+          value_type: FLOAT
+          description: 'Helper for the average request duration.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - registry_http_request_duration_seconds_count
+                - function
+                - sum
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: http
+        - uuid: a5f04cc0fc0040668a07525bd5931f0c
+          name: 'Registry: HTTP request duration, seconds per second'
+          type: DEPENDENT
+          key: registry.http.duration.sum.rate
+          delay: '0'
+          history: 1d
+          value_type: FLOAT
+          description: 'Helper for the average request duration.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - registry_http_request_duration_seconds_sum
+                - function
+                - sum
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: http
+        - uuid: 5a0b4f1dd7c642239518b01688907c3e
+          name: 'Registry: HTTP requests in flight'
+          type: DEPENDENT
+          key: registry.http.in_flight
+          delay: '0'
+          value_type: FLOAT
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - registry_http_in_flight_requests
+                - function
+                - sum
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: http
+        - uuid: 032113225f2643c99a243e6920a2db50
+          name: 'Registry: HTTP 5xx responses total'
+          type: DEPENDENT
+          key: registry.http.requests.5xx
+          delay: '0'
+          value_type: FLOAT
+          description: 'Counter since process start. No 5xx series exposed yet = 0.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'registry_http_requests_total{code=~"5.."}'
+                - function
+                - sum
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: http
+          triggers:
+            - uuid: cd7c7310e98444deb37e5785c902e12f
+              expression: 'last(/Docker Registry/registry.http.requests.5xx)>min(/Docker Registry/registry.http.requests.5xx,{$REGISTRY.ERRORS.PERIOD})'
+              name: 'Registry: HTTP 5xx responses in the last {$REGISTRY.ERRORS.PERIOD}'
+              priority: WARNING
+              description: 'The 5xx counter grew. Check the registry container logs for the failing requests.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: dc9ac2a883e449d48ff450e7ab2bad3f
+          name: 'Registry: HTTP requests per second'
+          type: DEPENDENT
+          key: registry.http.requests.rate
+          delay: '0'
+          value_type: FLOAT
+          units: rps
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - registry_http_requests_total
+                - function
+                - sum
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: http
+        - uuid: 2bcf0dd3aaea4e668bb96dface027b24
+          name: 'Registry: Get metrics'
+          type: HTTP_AGENT
+          key: registry.metrics
+          history: '0'
+          value_type: TEXT
+          trends: '0'
+          description: 'Raw Prometheus metrics, master item for the dependent items.'
+          timeout: 5s
+          url: '{$REGISTRY.DEBUG.URL}/metrics'
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 1c696a579a7049a9967a87dc07b3b7bf
+          name: 'Registry: Max file descriptors'
+          type: DEPENDENT
+          key: registry.process.fds.max
+          delay: '0'
+          history: 1d
+          value_type: FLOAT
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - process_max_fds
+                - value
+                - ''
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: process
+        - uuid: e7336fb23e904c129ea94f0a7033dd7a
+          name: 'Registry: Open file descriptors'
+          type: DEPENDENT
+          key: registry.process.fds.open
+          delay: '0'
+          value_type: FLOAT
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - process_open_fds
+                - value
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: process
+        - uuid: 8ed61c0038f5458090571711e0d18999
+          name: 'Registry: File descriptors used'
+          type: CALCULATED
+          key: registry.process.fds.pused
+          value_type: FLOAT
+          units: '%'
+          params: '100*last(//registry.process.fds.open)/last(//registry.process.fds.max)'
+          tags:
+            - tag: component
+              value: process
+          triggers:
+            - uuid: 0bd01e69250e4ed594f114d11e3ca833
+              expression: 'min(/Docker Registry/registry.process.fds.pused,5m)>{$REGISTRY.FDS.WARN}'
+              name: 'Registry: Running out of file descriptors (over {$REGISTRY.FDS.WARN}% for 5m)'
+              opdata: '{ITEM.LASTVALUE1}'
+              priority: WARNING
+              tags:
+                - tag: scope
+                  value: capacity
+        - uuid: b74cd471a93a4d82a8b39aca86593a26
+          name: 'Registry: Goroutines'
+          type: DEPENDENT
+          key: registry.process.goroutines
+          delay: '0'
+          value_type: FLOAT
+          description: 'Steady growth without load = leak.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - go_goroutines
+                - value
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: process
+        - uuid: 8d0b3228b88f44ec933d619d7eb392b5
+          name: 'Registry: Resident memory'
+          type: DEPENDENT
+          key: registry.process.memory.rss
+          delay: '0'
+          value_type: FLOAT
+          units: B
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - process_resident_memory_bytes
+                - value
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: process
+          triggers:
+            - uuid: e0ad6f82f6884d52961102b95f45b87c
+              expression: 'min(/Docker Registry/registry.process.memory.rss,5m)>{$REGISTRY.MEM.WARN}'
+              name: 'Registry: High memory usage (over {$REGISTRY.MEM.WARN} for 5m)'
+              opdata: '{ITEM.LASTVALUE1}'
+              priority: WARNING
+              description: 'Keep {$REGISTRY.MEM.WARN} below the container memory limit: the registry is OOM-killed when it is reached.'
+              tags:
+                - tag: scope
+                  value: capacity
+        - uuid: 4cdcd623ddcb413db9520c848d08a629
+          name: 'Registry: Uptime'
+          type: DEPENDENT
+          key: registry.process.uptime
+          delay: '0'
+          history: 7d
+          units: uptime
+          description: 'Time since the registry process started (process_start_time_seconds).'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - process_start_time_seconds
+                - value
+                - ''
+            - type: JAVASCRIPT
+              parameters:
+                - 'return Math.floor(Date.now() / 1000 - Number(value));'
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: process
+          triggers:
+            - uuid: d96292b3b46b4e028e427f079ec3e9a1
+              expression: 'last(/Docker Registry/registry.process.uptime)<10m'
+              name: 'Registry: Service has been restarted (uptime < 10m)'
+              priority: INFO
+              description: 'The registry process started less than 10 minutes ago.'
+              tags:
+                - tag: scope
+                  value: notice
+        - uuid: 8183252b5d7642319c4f3f6a61b0e944
+          name: 'Registry: Storage cache errors total'
+          type: DEPENDENT
+          key: registry.storage.cache.errors
+          delay: '0'
+          value_type: FLOAT
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - registry_storage_cache_errors_total
+                - value
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: storage
+          triggers:
+            - uuid: 96b19b8240d445c2aaea61f37a394f82
+              expression: 'last(/Docker Registry/registry.storage.cache.errors)>min(/Docker Registry/registry.storage.cache.errors,{$REGISTRY.ERRORS.PERIOD})'
+              name: 'Registry: Storage cache errors in the last {$REGISTRY.ERRORS.PERIOD}'
+              priority: WARNING
+              tags:
+                - tag: scope
+                  value: performance
+        - uuid: 88b760dfbd5c4f48b9d7491468173444
+          name: 'Registry: Storage cache hits total'
+          type: DEPENDENT
+          key: registry.storage.cache.hits
+          delay: '0'
+          history: 1d
+          value_type: FLOAT
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - registry_storage_cache_hits_total
+                - value
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: storage
+        - uuid: 36e3648178c046dd9b3b42f0a0727881
+          name: 'Registry: Storage cache hit ratio'
+          type: CALCULATED
+          key: registry.storage.cache.hit_ratio
+          value_type: FLOAT
+          units: '%'
+          params: '100*last(//registry.storage.cache.hits)/(last(//registry.storage.cache.requests)+0.000001)'
+          description: 'Since process start.'
+          tags:
+            - tag: component
+              value: storage
+        - uuid: 9cce6e366c4247219a07aee6badc135c
+          name: 'Registry: Storage cache requests total'
+          type: DEPENDENT
+          key: registry.storage.cache.requests
+          delay: '0'
+          history: 1d
+          value_type: FLOAT
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - registry_storage_cache_requests_total
+                - value
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: storage
+        - uuid: 47be7391fbe048e68ba919111f649e67
+          name: 'Registry: Storage action duration, average'
+          type: CALCULATED
+          key: registry.storage.duration.avg
+          value_type: FLOAT
+          units: s
+          params: last(//registry.storage.duration.sum.rate)/(last(//registry.storage.duration.count.rate)+0.000001)
+          description: 'Average over the polling interval, action Stat excluded; 0 when idle.'
+          tags:
+            - tag: component
+              value: storage
+        - uuid: ed15fea7580a4d7e96cb46df60b333d4
+          name: 'Registry: Storage action count, per second'
+          type: DEPENDENT
+          key: registry.storage.duration.count.rate
+          delay: '0'
+          history: 1d
+          value_type: FLOAT
+          description: 'Helper for the average storage action duration, action Stat excluded.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'registry_storage_action_seconds_count{action!="Stat"}'
+                - function
+                - sum
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: storage
+        - uuid: 19cca839fe3d40d48fe7381faa3d211a
+          name: 'Registry: Storage action duration, seconds per second'
+          type: DEPENDENT
+          key: registry.storage.duration.sum.rate
+          delay: '0'
+          history: 1d
+          value_type: FLOAT
+          description: 'Helper for the average storage action duration, action Stat excluded.'
+          preprocessing:
+            - type: PROMETHEUS_PATTERN
+              parameters:
+                - 'registry_storage_action_seconds_sum{action!="Stat"}'
+                - function
+                - sum
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          master_item:
+            key: registry.metrics
+          tags:
+            - tag: component
+              value: storage
+      tags:
+        - tag: class
+          value: software
+        - tag: target
+          value: docker-registry
+      macros:
+        - macro: '{$REGISTRY.DEBUG.URL}'
+          value: 'http://localhost:5001'
+          description: 'Registry debug listener (http.debug.addr), as seen from the Zabbix server.'
+        - macro: '{$REGISTRY.ERRORS.PERIOD}'
+          value: 15m
+          description: 'Window for the 5xx and cache error triggers.'
+        - macro: '{$REGISTRY.FDS.WARN}'
+          value: '80'
+          description: 'Open file descriptors, percent of the limit.'
+        - macro: '{$REGISTRY.MEM.WARN}'
+          value: 800M
+          description: 'Resident memory threshold.'
+        - macro: '{$REGISTRY.NODATA.PERIOD}'
+          value: 5m
+          description: 'No health answer for this long = unreachable.'
+      valuemaps:
+        - uuid: bd6ae0ac7c0c4d76b6f233e824b0ff5d
+          name: 'Registry health'
+          mappings:
+            - value: '0'
+              newvalue: Failing
+            - value: '1'
+              newvalue: Healthy
+  triggers:
+    - uuid: 278b605ffe6f45218c87f299cb7dfccf
+      expression: 'last(/Docker Registry/registry.health.status)=0 and last(/Docker Registry/registry.health)<>"{}"'
+      name: 'Registry: Health check failing'
+      opdata: '{ITEM.LASTVALUE2}'
+      priority: HIGH
+      description: 'Registry reports a failing health check (usually storagedriver). Operational data shows the raw answer naming the check.'
+      dependencies:
+        - name: 'Registry: Debug endpoint unreachable'
+          expression: 'nodata(/Docker Registry/registry.health,{$REGISTRY.NODATA.PERIOD})=1'
+      tags:
+        - tag: scope
+          value: availability
