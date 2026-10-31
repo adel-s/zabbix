@@ -1,0 +1,248 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    - uuid: e960332b3f6c46a1956486d4f3f99fce
+      name: 'Templates/Server hardware'
+  templates:
+    - uuid: f6378345c76c445fa12e2c59e31e6511
+      template: 'HailoRT Stats'
+      name: 'HailoRT Stats'
+      description: |
+        Hailo-8 AI accelerator: chip temperatures, power rail, NPU core frequency and throttling protection state.
+        Data comes from one Zabbix agent UserParameter (hailort_stats.raw) that runs scripts/hailort_stats.py through HailoRT (pyhailort); the other items are dependent.
+        Requires HailoRT 4.19 or newer on the host.
+      groups:
+        - name: 'Templates/Server hardware'
+      items:
+        - uuid: 220f4b404f8f423aa69d5983f894c54a
+          name: 'Hailo: NPU core frequency'
+          type: DEPENDENT
+          key: hailort_stats.device_info.nn_core_clock_mhz
+          delay: '0'
+          units: MHz
+          description: 'Neural network core clock. Below the nominal value (see {$HAILO.CLOCK.NOMINAL}) the device is throttling.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.device_info.nn_core_clock_mhz
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - '3600'
+          master_item:
+            key: hailort_stats.raw
+          tags:
+            - tag: component
+              value: Hailo-8
+          triggers:
+            - uuid: a467a68c66004502a9c9ed31820a7543
+              expression: 'last(/HailoRT Stats/hailort_stats.device_info.nn_core_clock_mhz)<{$HAILO.CLOCK.NOMINAL}'
+              name: 'Hailo: NPU core frequency below nominal ({$HAILO.CLOCK.NOMINAL} MHz)'
+              opdata: '{ITEM.LASTVALUE1}'
+              priority: WARNING
+              description: 'The device is throttling: check the temperature and power items.'
+              dependencies:
+                - name: 'Hailo: No stats from HailoRT for {$HAILO.NODATA.PERIOD}'
+                  expression: 'nodata(/HailoRT Stats/hailort_stats.temperature.ts0,{$HAILO.NODATA.PERIOD})=1'
+              tags:
+                - tag: scope
+                  value: performance
+        - uuid: 56f1936b80584b84bacf5dc473ae3f12
+          name: 'Hailo: Bus voltage'
+          type: DEPENDENT
+          key: hailort_stats.power.bus_voltage
+          delay: '0'
+          value_type: FLOAT
+          units: V
+          description: 'Supply rail voltage of the module.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.power.bus_voltage
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          master_item:
+            key: hailort_stats.raw
+          tags:
+            - tag: component
+              value: Hailo-8
+        - uuid: 769a7cfb4e4f4ba095a9b0bd4f60448c
+          name: 'Hailo: Current'
+          type: DEPENDENT
+          key: hailort_stats.power.current
+          delay: '0'
+          value_type: FLOAT
+          units: A
+          description: 'Current drawn by the module.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.power.current
+          master_item:
+            key: hailort_stats.raw
+          tags:
+            - tag: component
+              value: Hailo-8
+        - uuid: 89fa2903d89f45f5b365c03cf72e9cbf
+          name: 'Hailo: Power'
+          type: DEPENDENT
+          key: hailort_stats.power.power
+          delay: '0'
+          value_type: FLOAT
+          units: W
+          description: 'Power drawn by the module.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.power.power
+          master_item:
+            key: hailort_stats.raw
+          tags:
+            - tag: component
+              value: Hailo-8
+        - uuid: 229dde12eedc41f3a6bcad557fa7be38
+          name: 'Hailo: Shunt voltage'
+          type: DEPENDENT
+          key: hailort_stats.power.shunt_voltage
+          delay: '0'
+          value_type: FLOAT
+          units: V
+          description: 'Voltage drop on the current-sense shunt.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.power.shunt_voltage
+          master_item:
+            key: hailort_stats.raw
+          tags:
+            - tag: component
+              value: Hailo-8
+        - uuid: d062faca56cd4f039a4f6b506f7188a4
+          name: 'Hailo: Get stats'
+          key: hailort_stats.raw
+          history: '0'
+          value_type: TEXT
+          trends: '0'
+          description: 'Raw JSON from the hailort_stats.py UserParameter. Not stored; the other items parse it.'
+          tags:
+            - tag: component
+              value: Hailo-8
+        - uuid: ae59dc958d05494b84a2971334eda5fe
+          name: 'Hailo: Temperature (TS0)'
+          type: DEPENDENT
+          key: hailort_stats.temperature.ts0
+          delay: '0'
+          value_type: FLOAT
+          units: °C
+          description: 'Chip temperature, sensor TS0.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.temperature.ts0_temperature
+          master_item:
+            key: hailort_stats.raw
+          tags:
+            - tag: component
+              value: Hailo-8
+          triggers:
+            - uuid: b6a56a7221694acfa6a902dec98168fc
+              expression: 'nodata(/HailoRT Stats/hailort_stats.temperature.ts0,{$HAILO.NODATA.PERIOD})=1'
+              name: 'Hailo: No stats from HailoRT for {$HAILO.NODATA.PERIOD}'
+              priority: HIGH
+              description: 'The UserParameter returns no valid stats: HailoRT, its driver or the device is unavailable. The item errors show the reason.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: 9770ca9c715745a4908ca0d1346ed087
+          name: 'Hailo: Temperature (TS1)'
+          type: DEPENDENT
+          key: hailort_stats.temperature.ts1
+          delay: '0'
+          value_type: FLOAT
+          units: °C
+          description: 'Chip temperature, sensor TS1.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.temperature.ts1_temperature
+          master_item:
+            key: hailort_stats.raw
+          tags:
+            - tag: component
+              value: Hailo-8
+        - uuid: d0cca17ab6644407bf4abd9285494460
+          name: 'Hailo: Throttling protection'
+          type: DEPENDENT
+          key: hailort_stats.throttling_state
+          delay: '0'
+          description: 'Whether temperature/overcurrent throttling protection is enabled (pyhailort get_throttling_state). Enabled is the normal state.'
+          valuemap:
+            name: 'Hailo throttling protection'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.throttling_state
+            - type: STR_REPLACE
+              parameters:
+                - 'true'
+                - '1'
+            - type: STR_REPLACE
+              parameters:
+                - 'false'
+                - '0'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          master_item:
+            key: hailort_stats.raw
+          tags:
+            - tag: component
+              value: Hailo-8
+          triggers:
+            - uuid: 281dfb9d7a7745e699edf572b23555b9
+              expression: 'last(/HailoRT Stats/hailort_stats.throttling_state)=0'
+              name: 'Hailo: Throttling protection is disabled'
+              priority: WARNING
+              description: 'Temperature and overcurrent throttling protection is off: the chip will not slow down when it overheats or draws too much current.'
+              dependencies:
+                - name: 'Hailo: No stats from HailoRT for {$HAILO.NODATA.PERIOD}'
+                  expression: 'nodata(/HailoRT Stats/hailort_stats.temperature.ts0,{$HAILO.NODATA.PERIOD})=1'
+              tags:
+                - tag: scope
+                  value: notice
+      tags:
+        - tag: class
+          value: hardware
+        - tag: target
+          value: hailo
+      macros:
+        - macro: '{$HAILO.CLOCK.NOMINAL}'
+          value: '400'
+          description: 'Nominal NPU core frequency, MHz. Lower = throttling.'
+        - macro: '{$HAILO.NODATA.PERIOD}'
+          value: 10m
+          description: 'No stats for this long = HailoRT or the device is unavailable.'
+        - macro: '{$HAILO.TEMP.WARN}'
+          value: '80'
+          description: 'Chip temperature threshold, °C.'
+      valuemaps:
+        - uuid: bd7b10a1f25741cc8928a7d7e4b5778e
+          name: 'Hailo throttling protection'
+          mappings:
+            - value: '0'
+              newvalue: Disabled
+            - value: '1'
+              newvalue: Enabled
+  triggers:
+    - uuid: e8095e19e03d4049a936835cb4e460a5
+      expression: 'min(/HailoRT Stats/hailort_stats.temperature.ts0,5m)>{$HAILO.TEMP.WARN} or min(/HailoRT Stats/hailort_stats.temperature.ts1,5m)>{$HAILO.TEMP.WARN}'
+      name: 'Hailo: High temperature (over {$HAILO.TEMP.WARN}°C for 5m)'
+      opdata: 'TS0: {ITEM.LASTVALUE1}, TS1: {ITEM.LASTVALUE2}'
+      priority: WARNING
+      description: 'Improve the cooling of the module; sustained high temperature leads to throttling.'
+      dependencies:
+        - name: 'Hailo: No stats from HailoRT for {$HAILO.NODATA.PERIOD}'
+          expression: 'nodata(/HailoRT Stats/hailort_stats.temperature.ts0,{$HAILO.NODATA.PERIOD})=1'
+      tags:
+        - tag: scope
+          value: capacity
