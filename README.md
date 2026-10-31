@@ -1,10 +1,18 @@
-## Zabbix templates/scrpts
-This repo contains set of custom-built zabbix 6.x templates for various needs.
-Also you can find old (2.x) scripts/templates within folder [_2.x](https://github.com/adel-s/zabbix/tree/master/_2.x).
+# Zabbix
+## What
+A set of Zabbix templates and scripts I made:
+- [_2.x](_2.x) - old and really outdated scripts, kept just for history;
+- [6.x](6.x) - the current set of templates for Zabbix 6.x.
+
+## Layout
+Each template has its own folder `<version>.x/<template>/`:
+- `<template>.yaml` - the template, exported from a working Zabbix server;
+- `README.md` - what it monitors, prerequisites, installation, macros and where the template comes from;
+- `scripts/`, `conf/` - helper scripts and agent configuration, only when the template needs them.
 
 ## How to install
-Please refer to each folder's README.md because there could be different options depends of each particular case.
+Read the `README.md` in the template's folder first: some templates need software or agent configuration on the monitored host.
 
-## Contribution
-I don't accept pull requests (sorry, my code - my rules). But if something doesn't work - 
-please feel free to create issue and I'll try to fix it asap. Cheers!
+## License
+[GPL-2.0](LICENSE). Several templates are modifications of the official Zabbix
+templates, which Zabbix 6.x ships under the same license.
